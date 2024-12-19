@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Desglose de Facturas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        .header-cell {
+            background-color: blue;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+        }
+        .total-row {
+            font-weight: bold;
+            background-color: #f0f0f0;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <h1>Desglose de Facturas</h1>
+    <input type="file" id="xmlFiles" accept=".xml" multiple>
+    <button onclick="processXMLs()">Ejecutar</button>
+    <button onclick="generateExcel()">Descargar Excel</button>
+    <table id="data-table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Factura</th>
+                <th>RFC</th>
+                <th>Proveedor</th>
+                <th>Concepto</th>
+                <th>Subtotal</th>
+                <th>IVA</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="7">Total facturas</td>
+                <td id="totalGeneral">0.00</td>
+            </tr>
+        </tfoot>
+    </table>
+    <script>
+        function processXMLs() {
+            const fileInput = document.getElementById('xmlFiles');
+            const files = fileInput.files;
+            const tableBody = document.querySelector('#data-table tbody');
+            const totalGeneralCell = document.getElementById('totalGeneral');
+            tableBody.innerHTML = ''; 
+
+            let totalGeneral = 0;
+
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(event.target.result, "application/xml");
+
+                    const comprobante = xmlDoc.getElementsByTagName('cfdi:Comprobante')[0];
+                    if (comprobante) {
+                        const fecha = comprobante.getAttribute('Fecha');
+                        const factura = comprobante.getAttribute('Folio');
+                        const total = parseFloat(comprobante.getAttribute('Total') || 0).toFixed(2);
+                        const subtotal = parseFloat(comprobante.getAttribute('SubTotal') || 0).toFixed(2);
+
+                        const emisor = xmlDoc.getElementsByTagName('cfdi:Emisor')[0];
+                        const rfc = emisor ? emisor.getAttribute('Rfc') : 'N/A';
+                        const proveedor = emisor ? emisor.getAttribute('Nombre') : 'N/A';
+
+                        const conceptos = xmlDoc.getElementsByTagName('cfdi:Concepto');
+                        if (conceptos.length > 0) {
+                            const concepto = conceptos[0]; // Tomar solo el primer concepto
+                            const descripcion = concepto.getAttribute('Descripcion') || 'Sin descripción';
+
+                            const traslados = concepto.getElementsByTagName('cfdi:Traslado');
+                            let iva = 0;
+                            for (let traslado of traslados) {
+                                iva += parseFloat(traslado.getAttribute('Importe') || 0);
+                            }
+
+                            const row = tableBody.insertRow();
+                            row.insertCell(0).textContent = fecha;
+                            row.insertCell(1).textContent = factura;
+                            row.insertCell(2).textContent = rfc;
+                            row.insertCell(3).textContent = proveedor;
+                            row.insertCell(4).textContent = descripcion;
+                            row.insertCell(5).textContent = subtotal;
+                            row.insertCell(6).textContent = iva.toFixed(2);
+                            row.insertCell(7).textContent = total;
+
+                            totalGeneral += parseFloat(total);
+                        }
+
+                        totalGeneralCell.textContent = totalGeneral.toFixed(2);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function generateExcel() {
+            const table = document.getElementById('data-table');
+            const ws = XLSX.utils.table_to_sheet(table);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Facturas");
+
+            XLSX.writeFile(wb, "Desglose_facturas.xlsx");
+        }
+    </script>
+</body>
+</html>
